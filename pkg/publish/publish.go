@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"fmt"
 	"io"
-	"os"
+	"bufio"
 )
 
 const (
@@ -240,8 +240,7 @@ type Publisher interface {
 	PublishWithDuration(d time.Duration) error
 }
 
-var stdout, stderr []byte
-var errStdout, errStderr error
+
 var stdoutIn, stderrIn io.ReadCloser
 func (c *client)Initialize() Publisher {
 	c.exec = exec.Command("bash", "-c", c.Command())
@@ -266,11 +265,17 @@ func (c *client) PublishWithDuration(d time.Duration) error {
 	err := c.exec.Start()
 
 	go func() {
-		stdout, errStdout = copyAndCapture(os.Stdout, stdoutIn)
+		s := bufio.NewScanner(stdoutIn)
+		for s.Scan() {
+			fmt.Println(s.Text())
+		}
 	}()
 
 	go func() {
-		stderr, errStderr = copyAndCapture(os.Stderr, stderrIn)
+		s := bufio.NewScanner(stderrIn)
+		for s.Scan() {
+			fmt.Println(s.Text())
+		}
 	}()
 
 	if d != 0 {
@@ -292,30 +297,4 @@ func (c *client) PublishWithDuration(d time.Duration) error {
 
 func formatUint(i uint) string {
 	return strconv.FormatUint(uint64(i), 10)
-}
-
-func copyAndCapture(w io.Writer, r io.Reader) ([]byte, error) {
-	var out []byte
-	buf := make([]byte, 1024, 1024)
-	for {
-		n, err := r.Read(buf[:])
-		if n > 0 {
-			d := buf[:n]
-			out = append(out, d...)
-			_, err := w.Write(d)
-			if err != nil {
-				return out, err
-			}
-		}
-		if err != nil {
-			// Read returns io.EOF at the end of file, which is not an error for us
-			if err == io.EOF {
-				err = nil
-			}
-			return out, err
-		}
-	}
-	// never reached
-	panic(true)
-	return nil, nil
 }
